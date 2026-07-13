@@ -9,6 +9,7 @@ export interface Settings {
 	defaultExt: ".md" | ".txt";
 	showWordCount: boolean;
 	paneWidth: number;
+	theme: "system" | "light" | "dark";
 }
 
 export const DEFAULT_FONT_SIZE = 15;
@@ -22,6 +23,7 @@ const defaults: Settings = {
 	defaultExt: ".md",
 	showWordCount: true,
 	paneWidth: 230,
+	theme: "system",
 };
 
 let store: Store | null = null;

@@ -6,6 +6,8 @@
   "permissions": [
     "core:default",
     "core:window:allow-destroy",
+    "core:menu:allow-new",
+    "core:menu:allow-popup",
     "opener:default",
     "opener:allow-reveal-item-in-dir",
     "dialog:default",

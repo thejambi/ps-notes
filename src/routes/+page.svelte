@@ -4,6 +4,7 @@
 	import { exists, readTextFile, rename, watch, writeTextFile, type UnwatchFn } from "@tauri-apps/plugin-fs";
 	import { revealItemInDir } from "@tauri-apps/plugin-opener";
 	import { getCurrentWindow } from "@tauri-apps/api/window";
+	import { Menu, PredefinedMenuItem } from "@tauri-apps/api/menu";
 	import type { EditorView } from "@codemirror/view";
 	import type { Extension } from "@codemirror/state";
 
@@ -17,7 +18,7 @@
 		uniquePath,
 		trashNote,
 		archiveNote,
-		noteContains,
+		searchNoteContents,
 		type DirListing,
 		type NoteInfo,
 	} from "$lib/notes";
@@ -36,6 +37,7 @@
 		defaultExt: ".md",
 		showWordCount: true,
 		paneWidth: 230,
+		theme: "system",
 	});
 	let ready = $state(false);
 	let rootDir = $state<string | null>(null);
@@ -62,6 +64,7 @@
 	let unwatch: UnwatchFn | null = null;
 
 	const SAVE_DELAY_MS = 800; // save during a natural typing breather
+	const RENDER_CAP = 300; // list rows rendered at once; filtering narrows the rest
 
 	const visibleFolders = $derived.by(() => {
 		const q = filterText.trim().toLowerCase();
@@ -83,7 +86,18 @@
 		return parts;
 	});
 
-	// Filter notes: title matches first, then full-text matches
+	// Apply the theme choice; "system" defers to prefers-color-scheme
+	$effect(() => {
+		if (settings.theme === "system") {
+			delete document.documentElement.dataset.theme;
+		} else {
+			document.documentElement.dataset.theme = settings.theme;
+		}
+	});
+
+	// Filter notes: title matches show instantly; full-text matches (searched
+	// in Rust) are appended after a short debounce.
+	const SEARCH_DEBOUNCE_MS = 250;
 	let searchGen = 0;
 	$effect(() => {
 		const q = filterText.trim().toLowerCase();
@@ -95,17 +109,22 @@
 		}
 		const titleMatches = notes.filter((n) => n.title.toLowerCase().includes(q));
 		displayNotes = titleMatches;
-		void (async () => {
-			const matched = new Set(titleMatches.map((n) => n.path));
-			const bodyMatches: NoteInfo[] = [];
-			for (const n of notes) {
-				if (matched.has(n.path)) continue;
-				if (await noteContains(n, q)) bodyMatches.push(n);
+		const dir = curDir;
+		if (!dir || q.length < 2) return;
+		const timer = setTimeout(async () => {
+			try {
+				const hits = await searchNoteContents(dir, q);
+				if (gen !== searchGen) return;
+				const titleSet = new Set(titleMatches.map((n) => n.path));
+				const bodyMatches = notes.filter((n) => hits.has(n.path) && !titleSet.has(n.path));
+				if (bodyMatches.length > 0) {
+					displayNotes = [...titleMatches, ...bodyMatches];
+				}
+			} catch (e) {
+				console.error("content search failed", e);
 			}
-			if (gen === searchGen && bodyMatches.length > 0) {
-				displayNotes = [...titleMatches, ...bodyMatches];
-			}
-		})();
+		}, SEARCH_DEBOUNCE_MS);
+		return () => clearTimeout(timer);
 	});
 
 	// --- Saving (one atomic operation: derive title -> rename if needed -> write) ---
@@ -338,6 +357,89 @@
 		}
 	}
 
+	// --- Context menus (native, via Tauri menu API) ---
+
+	async function archiveFromList(n: NoteInfo): Promise<void> {
+		if (!curDir) return;
+		if (cur.path === n.path) {
+			await archiveCurrent();
+			return;
+		}
+		try {
+			await archiveNote(n.path, curDir);
+		} catch (e) {
+			console.error("archive failed", e);
+		}
+		await refreshList();
+	}
+
+	async function trashFromList(n: NoteInfo): Promise<void> {
+		try {
+			await trashNote(n.path);
+		} catch (e) {
+			console.error("trash failed", e);
+			return;
+		}
+		if (cur.path === n.path) {
+			// The open note's file is gone; discard editor state without saving
+			if (saveTimer) {
+				clearTimeout(saveTimer);
+				saveTimer = null;
+			}
+			dirty = false;
+			isOpening = true;
+			cur = { path: null, title: "", ext: settings.defaultExt };
+			selectedPath = null;
+			setDocument(view, extensions, "");
+			wordCount = 0;
+			isOpening = false;
+		}
+		await refreshList();
+	}
+
+	async function showEditContextMenu(): Promise<void> {
+		const items = await Promise.all([
+			PredefinedMenuItem.new({ item: "Cut" }),
+			PredefinedMenuItem.new({ item: "Copy" }),
+			PredefinedMenuItem.new({ item: "Paste" }),
+			PredefinedMenuItem.new({ item: "Separator" }),
+			PredefinedMenuItem.new({ item: "SelectAll" }),
+		]);
+		const menu = await Menu.new({ items });
+		await menu.popup();
+	}
+
+	async function showNoteContextMenu(n: NoteInfo): Promise<void> {
+		const menu = await Menu.new({
+			items: [
+				{ id: "open", text: "Open", action: () => void openNote(n) },
+				{
+					id: "reveal",
+					text: isMac ? "Reveal in Finder" : "Show in File Manager",
+					action: () => void revealItemInDir(n.path),
+				},
+				{ id: "archive", text: "Archive", action: () => void archiveFromList(n) },
+				await PredefinedMenuItem.new({ item: "Separator" }),
+				{ id: "trash", text: "Move to Trash", action: () => void trashFromList(n) },
+			],
+		});
+		await menu.popup();
+	}
+
+	function onContextMenu(e: MouseEvent): void {
+		e.preventDefault(); // never show the webview's browser menu
+		const el = e.target as Element | null;
+		const row = el?.closest(".row.note") as HTMLElement | null;
+		if (row?.dataset.path) {
+			const n = displayNotes.find((x) => x.path === row.dataset.path);
+			if (n) void showNoteContextMenu(n);
+			return;
+		}
+		if (el?.closest(".cm-editor") || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+			void showEditContextMenu();
+		}
+	}
+
 	// --- Fonts, write mode, shortcuts ---
 
 	function bumpFont(delta: number): void {
@@ -531,7 +633,7 @@
 	];
 </script>
 
-<svelte:window onkeydown={onKeydown} onmousedown={onWindowMousedown} />
+<svelte:window onkeydown={onKeydown} onmousedown={onWindowMousedown} oncontextmenu={onContextMenu} />
 
 <main class="app" class:write-mode={writeMode}>
 	<div class="toolbar">
@@ -628,6 +730,17 @@
 							>{writeMode ? "✓" : " "} Write mode</button
 						>
 						<div class="menu-sep"></div>
+						<div class="menu-label">Appearance</div>
+						{#each ["system", "light", "dark"] as const as t (t)}
+							<button
+								class="menu-item check"
+								onclick={() => {
+									settings.theme = t;
+									persist("theme", t);
+								}}>{settings.theme === t ? "✓" : " "} {t[0].toUpperCase() + t.slice(1)}</button
+							>
+						{/each}
+						<div class="menu-sep"></div>
 						<div class="menu-label">New notes are saved as</div>
 						<button
 							class="menu-item check"
@@ -690,11 +803,19 @@
 						><span class="folder-mark">/</span>{f}</button
 					>
 				{/each}
-				{#each displayNotes as n (n.path)}
-					<button class="row note" class:selected={n.path === selectedPath} onclick={() => void openNote(n)}>
+				{#each displayNotes.slice(0, RENDER_CAP) as n (n.path)}
+					<button
+						class="row note"
+						class:selected={n.path === selectedPath}
+						data-path={n.path}
+						onclick={() => void openNote(n)}
+					>
 						{n.title}<span class="ext-tag">{n.ext === ".md" ? "" : n.ext}</span>
 					</button>
 				{/each}
+				{#if displayNotes.length > RENDER_CAP}
+					<div class="empty-hint">…and {displayNotes.length - RENDER_CAP} more — type to narrow down.</div>
+				{/if}
 				{#if curDir && visibleFolders.length === 0 && displayNotes.length === 0}
 					<div class="empty-hint">
 						{filterText
@@ -764,8 +885,9 @@
 		--hover: #ebeae6;
 		--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 	}
+	/* Dark palette applies when the OS is dark (unless forced light), or when forced dark */
 	@media (prefers-color-scheme: dark) {
-		:global(:root) {
+		:global(:root:not([data-theme="light"])) {
 			--bg: #1e1e1c;
 			--bg-panel: #262624;
 			--fg: #e8e6e1;
@@ -776,6 +898,17 @@
 			--sel: #2d4a6d;
 			--hover: #32312e;
 		}
+	}
+	:global(:root[data-theme="dark"]) {
+		--bg: #1e1e1c;
+		--bg-panel: #262624;
+		--fg: #e8e6e1;
+		--fg-dim: #a3a19a;
+		--fg-faint: #62615c;
+		--accent: #6aa5ee;
+		--border: #383734;
+		--sel: #2d4a6d;
+		--hover: #32312e;
 	}
 
 	:global(html),

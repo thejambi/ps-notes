@@ -1,4 +1,4 @@
-import { exists, mkdir, readDir, readTextFile, rename, stat } from "@tauri-apps/plugin-fs";
+import { exists, mkdir, rename } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { baseName, pathJoin } from "./paths";
 
@@ -24,31 +24,31 @@ export function extOf(name: string): string | null {
 	return NOTE_EXTS.includes(ext) ? ext : null;
 }
 
+interface FsEntry {
+	name: string;
+	isDir: boolean;
+	mtimeMs: number;
+}
+
+/** One IPC round-trip for the whole folder (names + mtimes come from Rust). */
 export async function listDir(dir: string): Promise<DirListing> {
-	const entries = await readDir(dir);
+	const entries = await invoke<FsEntry[]>("list_notes", { dir });
 	const folders: string[] = [];
 	const notes: NoteInfo[] = [];
-	await Promise.all(
-		entries.map(async (e) => {
-			if (e.name.startsWith(".")) return;
-			if (e.isDirectory) {
-				folders.push(e.name);
-				return;
-			}
-			if (!e.isFile) return;
-			const ext = extOf(e.name);
-			if (!ext) return;
-			const path = pathJoin(dir, e.name);
-			let mtime = 0;
-			try {
-				const info = await stat(path);
-				mtime = info.mtime ? new Date(info.mtime).getTime() : 0;
-			} catch {
-				// unreadable file; list it anyway
-			}
-			notes.push({ title: e.name.slice(0, e.name.length - ext.length), path, ext, mtime });
-		}),
-	);
+	for (const e of entries) {
+		if (e.isDir) {
+			folders.push(e.name);
+			continue;
+		}
+		const ext = extOf(e.name);
+		if (!ext) continue;
+		notes.push({
+			title: e.name.slice(0, e.name.length - ext.length),
+			path: pathJoin(dir, e.name),
+			ext,
+			mtime: e.mtimeMs,
+		});
+	}
 	folders.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 	return { folders, notes };
 }
@@ -112,19 +112,8 @@ export async function archiveNote(path: string, dir: string): Promise<void> {
 	await rename(path, target);
 }
 
-/* --- Full-text search with a small mtime-validated cache --- */
-
-const contentCache = new Map<string, { mtime: number; text: string }>();
-
-export async function noteContains(note: NoteInfo, lowerQuery: string): Promise<boolean> {
-	let cached = contentCache.get(note.path);
-	if (!cached || cached.mtime !== note.mtime) {
-		try {
-			cached = { mtime: note.mtime, text: (await readTextFile(note.path)).toLowerCase() };
-		} catch {
-			return false;
-		}
-		contentCache.set(note.path, cached);
-	}
-	return cached.text.includes(lowerQuery);
+/** Full-text search runs in Rust: one IPC call, returns matching file paths. */
+export async function searchNoteContents(dir: string, query: string): Promise<Set<string>> {
+	const paths = await invoke<string[]>("search_notes", { dir, query, exts: NOTE_EXTS });
+	return new Set(paths);
 }
