@@ -96,6 +96,11 @@ export async function trashNote(path: string): Promise<void> {
 	await invoke("move_to_trash", { path });
 }
 
+/** Crash-safe save: Rust writes a temp file, fsyncs, then renames over the target. */
+export async function saveNoteFile(path: string, contents: string): Promise<void> {
+	await invoke("save_note", { path, contents });
+}
+
 export const ARCHIVE_DIR_NAME = "Archive";
 
 /** Move a note into the notebook's Archive subfolder. */

@@ -4,10 +4,12 @@
  * UI components import `app` and the action functions directly.
  */
 import { open as openFolderDialog } from "@tauri-apps/plugin-dialog";
-import { exists, readTextFile, rename, watch, writeTextFile, type UnwatchFn } from "@tauri-apps/plugin-fs";
+import { exists, readTextFile, rename, watch, type UnwatchFn } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Menu, PredefinedMenuItem } from "@tauri-apps/api/menu";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import type { EditorView } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
 
@@ -20,6 +22,7 @@ import {
 	uniquePath,
 	trashNote,
 	archiveNote,
+	saveNoteFile,
 	type DirListing,
 	type NoteInfo,
 } from "./notes";
@@ -108,7 +111,7 @@ async function saveNow(): Promise<void> {
 		if (text.trim() === "") return;
 		const title = titleFromText(text) || timestampTitle();
 		const path = await uniquePath(app.curDir, title, app.settings.defaultExt);
-		await writeTextFile(path, text);
+		await saveNoteFile(path, text);
 		const name = baseName(path);
 		cur = {
 			path,
@@ -149,12 +152,12 @@ async function saveNow(): Promise<void> {
 				console.error("rename failed, keeping old filename", e);
 			}
 		}
-		await writeTextFile(path, text);
+		await saveNoteFile(path, text);
 		await refreshList();
 		return;
 	}
 
-	await writeTextFile(path, text);
+	await saveNoteFile(path, text);
 }
 
 export async function flushSave(): Promise<void> {
@@ -299,8 +302,12 @@ async function onExternalChange(): Promise<void> {
 	await refreshList();
 	// Reload the open note if it changed on disk and we have no unsaved edits
 	if (!cur.path || dirty || saveTimer) return;
+	const readPath = cur.path;
 	try {
-		const text = await readTextFile(cur.path);
+		const text = await readTextFile(readPath);
+		// Re-check after the read: the user may have typed or switched notes
+		// while the disk read was in flight — never clobber live keystrokes.
+		if (cur.path !== readPath || dirty || saveTimer) return;
 		if (text !== view.state.doc.toString()) {
 			const sel = Math.min(view.state.selection.main.head, text.length);
 			isOpening = true;
@@ -429,6 +436,7 @@ export function closeMenus(): void {
 export function initApp(editorParentEl: HTMLElement): () => void {
 	editorParent = editorParentEl;
 	let unlistenClose: (() => void) | undefined;
+	let unlistenExit: (() => void) | undefined;
 
 	void (async () => {
 		app.settings = { ...app.settings, ...(await initSettings()) };
@@ -455,6 +463,12 @@ export function initApp(editorParentEl: HTMLElement): () => void {
 				void appWindow.destroy();
 			}
 		});
+
+		// Cmd+Q / app quit: Rust holds the exit until we flush and confirm
+		unlistenExit = await listen("app-exit-requested", async () => {
+			await flushSave();
+			await invoke("really_quit");
+		});
 	})();
 
 	const flushOnBlur = () => void flushSave();
@@ -463,6 +477,7 @@ export function initApp(editorParentEl: HTMLElement): () => void {
 	return () => {
 		window.removeEventListener("blur", flushOnBlur);
 		unlistenClose?.();
+		unlistenExit?.();
 		if (unwatch) unwatch();
 		view?.destroy();
 	};

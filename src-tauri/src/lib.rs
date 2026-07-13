@@ -1,7 +1,52 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{Emitter, Manager};
+
+/// Set once the frontend has flushed unsaved work and confirmed it is safe to exit.
+static ALLOW_EXIT: AtomicBool = AtomicBool::new(false);
+
 /// Move a file to the OS trash/recycle bin rather than deleting it outright.
 #[tauri::command]
 fn move_to_trash(path: String) -> Result<(), String> {
     trash::delete(&path).map_err(|e| e.to_string())
+}
+
+/// Crash-safe note save: write to a hidden temp file in the same directory,
+/// fsync, then atomically rename over the target. A crash mid-write can never
+/// leave a truncated note behind.
+#[tauri::command]
+async fn save_note(path: String, contents: String) -> Result<(), String> {
+    use std::io::Write;
+    let target = std::path::PathBuf::from(&path);
+    let dir = target
+        .parent()
+        .ok_or_else(|| "note path has no parent directory".to_string())?;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    let tmp = dir.join(format!(".psnotes-tmp-{}-{}", std::process::id(), nanos));
+    let write = (|| -> std::io::Result<()> {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(contents.as_bytes())?;
+        f.sync_all()?;
+        Ok(())
+    })();
+    if let Err(e) = write {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e.to_string());
+    }
+    std::fs::rename(&tmp, &target).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        e.to_string()
+    })
+}
+
+/// Called by the frontend after flushing unsaved work in response to an
+/// exit request (Cmd+Q etc.); actually quits the app.
+#[tauri::command]
+fn really_quit(app: tauri::AppHandle) {
+    ALLOW_EXIT.store(true, Ordering::SeqCst);
+    app.exit(0);
 }
 
 #[derive(serde::Serialize)]
@@ -82,7 +127,24 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![move_to_trash, list_notes, search_notes])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .invoke_handler(tauri::generate_handler![
+            move_to_trash,
+            save_note,
+            really_quit,
+            list_notes,
+            search_notes
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // Cmd+Q / app quit: give the frontend a chance to flush unsaved
+            // work first. If the window is already gone (close-button path,
+            // which flushes on its own), let the exit proceed.
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+                if !ALLOW_EXIT.load(Ordering::SeqCst) && !app_handle.webview_windows().is_empty() {
+                    api.prevent_exit();
+                    let _ = app_handle.emit("app-exit-requested", ());
+                }
+            }
+        });
 }
