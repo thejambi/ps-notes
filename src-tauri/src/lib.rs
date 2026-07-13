@@ -45,6 +45,8 @@ async fn save_note(path: String, contents: String) -> Result<(), String> {
 /// exit request (Cmd+Q etc.); actually quits the app.
 #[tauri::command]
 fn really_quit(app: tauri::AppHandle) {
+    use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+    let _ = app.save_window_state(StateFlags::all());
     ALLOW_EXIT.store(true, Ordering::SeqCst);
     app.exit(0);
 }
@@ -127,6 +129,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             move_to_trash,
             save_note,
