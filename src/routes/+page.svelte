@@ -50,6 +50,9 @@
 	let selectedPath = $state<string | null>(null);
 	let wordCount = $state(0);
 	let writeMode = $state(false);
+	// Editor width in px, frozen at the moment write mode turns on, so the text
+	// column (and therefore line wrapping) stays pixel-identical with no sidebar.
+	let writeModeWidth = $state<number | null>(null);
 	let openMenuShown = $state(false);
 	let settingsMenuShown = $state(false);
 	let modal = $state<"shortcuts" | "about" | null>(null);
@@ -456,10 +459,25 @@
 		persist("fontSize", DEFAULT_FONT_SIZE);
 	}
 
-	function toggleWriteMode(): void {
-		writeMode = !writeMode;
+	function setWriteMode(on: boolean): void {
+		if (on && !writeMode) {
+			// Measure the scroller's inner width (excludes any classic scrollbar)
+			// so the pinned column matches the pre-toggle text width exactly.
+			writeModeWidth = view?.scrollDOM.clientWidth ?? editorParent?.clientWidth ?? null;
+		}
+		writeMode = on;
+		if (!on) writeModeWidth = null;
 		view?.focus();
 	}
+
+	function toggleWriteMode(): void {
+		setWriteMode(!writeMode);
+	}
+
+	const editorStyle = $derived(
+		`font-size: ${settings.fontSize}px;` +
+			(writeMode && writeModeWidth !== null ? ` --editor-max-width: ${writeModeWidth}px;` : ""),
+	);
 
 	function closeMenus(): void {
 		openMenuShown = false;
@@ -481,7 +499,7 @@
 			} else if (openMenuShown || settingsMenuShown) {
 				closeMenus();
 			} else if (writeMode) {
-				writeMode = false;
+				setWriteMode(false);
 			} else if (document.activeElement === filterInput) {
 				if (filterText !== "") filterText = "";
 				else view.focus();
@@ -840,7 +858,7 @@
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div class="divider" role="separator" aria-orientation="vertical" onmousedown={startPaneDrag}></div>
 
-		<div class="editor-wrap" style="font-size: {settings.fontSize}px" bind:this={editorParent}></div>
+		<div class="editor-wrap" style={editorStyle} bind:this={editorParent}></div>
 	</div>
 
 	{#if ready && !curDir}
@@ -1098,9 +1116,6 @@
 	.write-mode .divider,
 	.write-mode .toolbar {
 		display: none;
-	}
-	.write-mode .editor-wrap {
-		--editor-max-width: 42em;
 	}
 
 	.filter {
