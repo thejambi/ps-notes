@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { revealItemInDir } from "@tauri-apps/plugin-opener";
+	import { getCurrentWindow } from "@tauri-apps/api/window";
 	import { baseName, pathJoin, isWithin } from "$lib/paths";
 	import { persist } from "$lib/settings";
 	import {
 		app,
+		isMac,
+		isWindows,
 		modKeyLabel,
 		chooseFolder,
 		setNotesDir,
@@ -15,6 +18,8 @@
 		bumpFont,
 		resetFont,
 	} from "$lib/app.svelte";
+
+	const appWindow = getCurrentWindow();
 
 	const crumbs = $derived.by(() => {
 		if (!app.curDir || !app.rootDir) return [];
@@ -34,7 +39,7 @@
 	});
 </script>
 
-<div class="toolbar">
+<div class="toolbar" class:mac={isMac} data-tauri-drag-region>
 	<div class="toolbar-group">
 		<div class="menu-wrap">
 			<button
@@ -86,7 +91,7 @@
 		>
 	</div>
 
-	<div class="crumbs">
+	<div class="crumbs" data-tauri-drag-region>
 		{#each crumbs as c, i (c.path)}
 			{#if i > 0}<span class="crumb-sep">/</span>{/if}
 			<button
@@ -179,6 +184,14 @@
 				</div>
 			{/if}
 		</div>
+
+		{#if isWindows}
+			<div class="win-controls">
+				<button class="win-btn" title="Minimize" onclick={() => void appWindow.minimize()}>&#xE921;</button>
+				<button class="win-btn" title="Maximize" onclick={() => void appWindow.toggleMaximize()}>&#xE922;</button>
+				<button class="win-btn win-close" title="Close" onclick={() => void appWindow.close()}>&#xE8BB;</button>
+			</div>
+		{/if}
 	</div>
 </div>
 
@@ -193,6 +206,34 @@
 		background: var(--bg-panel);
 		user-select: none;
 		flex: none;
+	}
+	/* macOS overlay titlebar: clear the traffic lights */
+	.toolbar.mac {
+		padding-left: 84px;
+	}
+
+	/* Windows: custom window controls (no native decorations) */
+	.win-controls {
+		display: flex;
+		align-items: stretch;
+		align-self: stretch;
+		margin: -6px -10px -6px 4px; /* bleed to the window edge */
+	}
+	.win-btn {
+		font-family: "Segoe MDL2 Assets", "Segoe Fluent Icons", sans-serif;
+		font-size: 10px;
+		color: var(--fg);
+		background: transparent;
+		border: none;
+		width: 46px;
+		cursor: default;
+	}
+	.win-btn:hover {
+		background: var(--hover);
+	}
+	.win-btn.win-close:hover {
+		background: #e81123;
+		color: #fff;
 	}
 	.toolbar-group {
 		display: flex;

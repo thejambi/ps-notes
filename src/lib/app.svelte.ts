@@ -29,6 +29,7 @@ import {
 import { buildExtensions, createEditor, setDocument, countWords } from "./editor";
 
 export const isMac = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
+export const isWindows = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
 export const modKeyLabel = isMac ? "⌘" : "Ctrl+";
 export const RENDER_CHUNK = 300; // list rows rendered per batch; scrolling to the bottom loads more
 const SAVE_DELAY_MS = 800; // save during a natural typing breather

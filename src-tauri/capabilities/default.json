@@ -6,6 +6,10 @@
   "permissions": [
     "core:default",
     "core:window:allow-destroy",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
     "core:menu:allow-new",
     "core:menu:allow-popup",
     "opener:default",
