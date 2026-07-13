@@ -25,7 +25,8 @@
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-store": "^2.4.3",
-    "codemirror": "^6.0.2"
+    "codemirror": "^6.0.2",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.6",

@@ -27,6 +27,7 @@ import {
 	type NoteInfo,
 } from "./notes";
 import { buildExtensions, createEditor, setDocument, countWords } from "./editor";
+import { detectBookRoot, compileChapterText, saveCompiledChapter, compileEpub } from "./book";
 
 export const isMac = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
 export const isWindows = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
@@ -62,6 +63,9 @@ export const app = $state({
 	openMenuShown: false,
 	settingsMenuShown: false,
 	modal: null as "shortcuts" | "about" | null,
+	// Book mode: set when a visited folder contains a title.txt starting with ---
+	bookRoot: null as string | null,
+	toast: "",
 });
 
 // --- Non-reactive editor / save machinery ---
@@ -172,12 +176,63 @@ export async function flushSave(): Promise<void> {
 // --- Notes / folders ---
 
 export async function refreshList(): Promise<void> {
-	if (!app.curDir) return;
+	const dir = app.curDir;
+	if (!dir) return;
 	try {
-		app.listing = await listDir(app.curDir);
+		app.listing = await listDir(dir);
 	} catch (e) {
 		console.error("could not list folder", e);
 		app.listing = { folders: [], notes: [] };
+	}
+	// Book detection: this folder is a book root if title.txt starts with ---
+	if (await detectBookRoot(dir, app.listing.notes.map((n) => n.title))) {
+		app.bookRoot = dir;
+	} else if (app.bookRoot === dir) {
+		app.bookRoot = null;
+	}
+}
+
+/** Is `dir` a chapter folder (direct child of the current book root)? */
+export function isChapterDir(dir: string): boolean {
+	return app.bookRoot !== null && dir !== app.bookRoot && parentDir(dir) === app.bookRoot;
+}
+
+/** Is the current folder a chapter of a book? */
+export function inChapter(): boolean {
+	return app.curDir !== null && isChapterDir(app.curDir);
+}
+
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+export function showToast(msg: string): void {
+	app.toast = msg;
+	if (toastTimer) clearTimeout(toastTimer);
+	toastTimer = setTimeout(() => (app.toast = ""), 4000);
+}
+
+/** Compile the chapter being left into "Chapter NN" in the book root. */
+async function compileLeftChapter(chapterDir: string): Promise<void> {
+	const bookRoot = app.bookRoot;
+	if (!bookRoot) return;
+	try {
+		const { title, text } = await compileChapterText(chapterDir);
+		await saveCompiledChapter(bookRoot, title, text, app.settings.defaultExt);
+		showToast(`Compiled ${title}`);
+	} catch (e) {
+		console.error("chapter compile failed", e);
+	}
+}
+
+/** Compile the whole book (title + compiled chapters) into an ePub. */
+export async function compileBook(): Promise<void> {
+	if (!app.curDir || app.curDir !== app.bookRoot) return;
+	await flushSave();
+	try {
+		const res = await compileEpub(app.curDir);
+		showToast(`ePub compiled — ${res.chapters} chapters`);
+		void revealItemInDir(res.path);
+		await refreshList();
+	} catch (e) {
+		showToast(e instanceof Error ? e.message : String(e));
 	}
 }
 
@@ -237,6 +292,10 @@ function isNotebook(dir: string): boolean {
 
 export async function setNotesDir(dir: string, asRoot: boolean): Promise<void> {
 	await flushSave();
+	// Leaving a chapter compiles it into the book root (original behavior)
+	if (app.curDir && dir !== app.curDir && isChapterDir(app.curDir)) {
+		await compileLeftChapter(app.curDir);
+	}
 	app.curDir = dir;
 	if (asRoot || isNotebook(dir)) {
 		app.rootDir = dir;

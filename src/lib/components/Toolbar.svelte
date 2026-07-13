@@ -17,6 +17,7 @@
 		toggleWriteMode,
 		bumpFont,
 		resetFont,
+		compileBook,
 	} from "$lib/app.svelte";
 
 	const appWindow = getCurrentWindow();
@@ -89,8 +90,16 @@
 		<button class="tb-btn" title="Archive note" onclick={() => void archiveCurrent()} disabled={!app.selectedPath}
 			>Archive</button
 		>
+		{#if app.curDir && app.curDir === app.bookRoot}
+			<button class="tb-btn book" title="Compile the book into an ePub" onclick={() => void compileBook()}
+				>📖 ePub</button
+			>
+		{/if}
 	</div>
 
+	{#if app.toast}
+		<span class="toast">{app.toast}</span>
+	{/if}
 	<div class="crumbs" data-tauri-drag-region>
 		{#each crumbs as c, i (c.path)}
 			{#if i > 0}<span class="crumb-sep">/</span>{/if}
@@ -244,6 +253,13 @@
 		font-size: 12px;
 		color: var(--fg-dim);
 		font-variant-numeric: tabular-nums;
+	}
+	.toast {
+		font-size: 12px;
+		color: var(--accent);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.crumbs {

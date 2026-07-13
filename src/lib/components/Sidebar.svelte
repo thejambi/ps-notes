@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { app, refs, RENDER_CHUNK, openNote, newNote, goUp, enterFolder } from "$lib/app.svelte";
+	import { app, refs, RENDER_CHUNK, openNote, newNote, goUp, enterFolder, inChapter } from "$lib/app.svelte";
 
 	const visibleFolders = $derived.by(() => {
 		const q = app.filterText.trim().toLowerCase();
@@ -45,10 +45,16 @@
 	/>
 	<div class="note-list" onscroll={onListScroll}>
 		{#if app.curDir && app.rootDir && app.curDir !== app.rootDir}
-			<button class="row folder up" onclick={() => void goUp()}>…</button>
+			<button
+				class="row folder up"
+				title={inChapter() ? "Back to book (compiles this chapter)" : "Up"}
+				onclick={() => void goUp()}>{inChapter() ? "# …" : "…"}</button
+			>
 		{/if}
 		{#each visibleFolders as f (f)}
-			<button class="row folder" onclick={() => void enterFolder(f)}><span class="folder-mark">/</span>{f}</button>
+			<button class="row folder" onclick={() => void enterFolder(f)}
+				><span class="folder-mark">{app.curDir === app.bookRoot ? "#" : "/"}</span>{f}</button
+			>
 		{/each}
 		{#each app.displayNotes.slice(0, app.renderLimit) as n (n.path)}
 			<button
