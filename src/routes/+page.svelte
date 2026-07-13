@@ -26,6 +26,7 @@
 
 	const isMac = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
 	const mod = isMac ? "⌘" : "Ctrl+";
+	const RENDER_CHUNK = 300; // list rows rendered per batch; scrolling to the bottom loads more
 
 	// --- Reactive state ---
 	let settings = $state<Settings>({
@@ -45,6 +46,7 @@
 	let listing = $state<DirListing>({ folders: [], notes: [] });
 	let filterText = $state("");
 	let displayNotes = $state<NoteInfo[]>([]);
+	let renderLimit = $state(RENDER_CHUNK);
 	let selectedPath = $state<string | null>(null);
 	let wordCount = $state(0);
 	let writeMode = $state(false);
@@ -64,7 +66,6 @@
 	let unwatch: UnwatchFn | null = null;
 
 	const SAVE_DELAY_MS = 800; // save during a natural typing breather
-	const RENDER_CAP = 300; // list rows rendered at once; filtering narrows the rest
 
 	const visibleFolders = $derived.by(() => {
 		const q = filterText.trim().toLowerCase();
@@ -103,6 +104,7 @@
 		const q = filterText.trim().toLowerCase();
 		const notes = sortNotes(listing.notes, settings.sortByModified);
 		const gen = ++searchGen;
+		renderLimit = RENDER_CHUNK;
 		if (!q) {
 			displayNotes = notes;
 			return;
@@ -559,6 +561,15 @@
 		}
 	}
 
+	// Render more rows as the list is scrolled toward the bottom
+	function onListScroll(e: Event): void {
+		if (renderLimit >= displayNotes.length) return;
+		const el = e.currentTarget as HTMLElement;
+		if (el.scrollTop + el.clientHeight >= el.scrollHeight - 400) {
+			renderLimit += RENDER_CHUNK;
+		}
+	}
+
 	// --- Pane divider drag ---
 	function startPaneDrag(e: MouseEvent): void {
 		e.preventDefault();
@@ -794,7 +805,7 @@
 				bind:value={filterText}
 				onkeydown={onFilterKeydown}
 			/>
-			<div class="note-list">
+			<div class="note-list" onscroll={onListScroll}>
 				{#if curDir && rootDir && curDir !== rootDir}
 					<button class="row folder up" onclick={() => void goUp()}>…</button>
 				{/if}
@@ -803,7 +814,7 @@
 						><span class="folder-mark">/</span>{f}</button
 					>
 				{/each}
-				{#each displayNotes.slice(0, RENDER_CAP) as n (n.path)}
+				{#each displayNotes.slice(0, renderLimit) as n (n.path)}
 					<button
 						class="row note"
 						class:selected={n.path === selectedPath}
@@ -813,8 +824,8 @@
 						{n.title}<span class="ext-tag">{n.ext === ".md" ? "" : n.ext}</span>
 					</button>
 				{/each}
-				{#if displayNotes.length > RENDER_CAP}
-					<div class="empty-hint">…and {displayNotes.length - RENDER_CAP} more — type to narrow down.</div>
+				{#if displayNotes.length > renderLimit}
+					<div class="empty-hint">…{displayNotes.length - renderLimit} more</div>
 				{/if}
 				{#if curDir && visibleFolders.length === 0 && displayNotes.length === 0}
 					<div class="empty-hint">
