@@ -69,6 +69,11 @@ const cmTheme = EditorView.theme({
 	},
 	".cm-title-line": { fontWeight: "700" },
 	".cm-tag": { color: "var(--accent)", fontWeight: "500" },
+	".cm-wikilink": {
+		color: "var(--accent)",
+		textDecoration: "underline dotted",
+		textUnderlineOffset: "2px",
+	},
 });
 
 /* --- Markdown editing commands (ported from NoteEditor.vala) --- */
@@ -228,6 +233,31 @@ const tagHighlighter = ViewPlugin.fromClass(
 	{ decorations: (v) => v.decorations },
 );
 
+/* --- Wiki links: [[another page title]], Cmd/Ctrl+click to search it --- */
+
+const WIKILINK_REGEX = /\[\[[^\[\]\n]+\]\]/g;
+
+const wikiMatcher = new MatchDecorator({
+	regexp: WIKILINK_REGEX,
+	decoration: Decoration.mark({
+		class: "cm-wikilink",
+		attributes: { title: (isMacUA ? "⌘" : "Ctrl+") + "click to search this title" },
+	}),
+});
+
+const wikiHighlighter = ViewPlugin.fromClass(
+	class {
+		decorations: DecorationSet;
+		constructor(view: EditorView) {
+			this.decorations = wikiMatcher.createDeco(view);
+		}
+		update(update: ViewUpdate) {
+			this.decorations = wikiMatcher.updateDeco(update, this.decorations);
+		}
+	},
+	{ decorations: (v) => v.decorations },
+);
+
 function matchAt(lineText: string, lineFrom: number, pos: number, regex: RegExp): string | null {
 	const re = new RegExp(regex.source, "g");
 	let m: RegExpExecArray | null;
@@ -253,6 +283,12 @@ function makeClickHandler(onTagClick?: (tag: string) => void) {
 				return true;
 			}
 			if (onTagClick) {
+				const wiki = matchAt(line.text, line.from, pos, WIKILINK_REGEX);
+				if (wiki) {
+					e.preventDefault();
+					onTagClick(wiki.slice(2, -2).trim());
+					return true;
+				}
 				const tag = matchAt(line.text, line.from, pos, TAG_REGEX);
 				if (tag) {
 					e.preventDefault();
@@ -294,6 +330,7 @@ export function buildExtensions(onDocChanged: () => void, onTagClick?: (tag: str
 		indentUnit.of("\t"),
 		urlHighlighter,
 		tagHighlighter,
+		wikiHighlighter,
 		makeClickHandler(onTagClick),
 		titleLineHighlighter,
 		placeholder("Start writing. The first line becomes the note's title…"),
