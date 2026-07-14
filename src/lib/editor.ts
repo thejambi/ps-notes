@@ -10,9 +10,9 @@ import {
 	type ViewUpdate,
 } from "@codemirror/view";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from "@codemirror/commands";
+import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
+import { HighlightStyle, indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 
 /* Live markdown styling: headings scale up, bold is bold, syntax marks dim.
@@ -144,6 +144,32 @@ const mdKeymap = [
 	{ key: "Mod-Shift-\\", run: (v: EditorView) => adjustHeading(v, -1) },
 ];
 
+/* --- Tab / indent behavior --- */
+
+const LIST_ITEM_RE = /^\s*([-*+]|\d+[.)])\s/;
+
+/** Tab indents list items and multi-line selections; elsewhere it inserts
+    a tab character. Never moves focus out of the editor. */
+function smartTab(view: EditorView): boolean {
+	const { state } = view;
+	const sel = state.selection.main;
+	const line = state.doc.lineAt(sel.head);
+	if (!sel.empty || LIST_ITEM_RE.test(line.text)) {
+		return indentMore(view);
+	}
+	view.dispatch(state.replaceSelection(state.facet(indentUnit)), {
+		scrollIntoView: true,
+		userEvent: "input",
+	});
+	return true;
+}
+
+const indentKeymap = [
+	{ key: "Tab", run: smartTab, shift: indentLess },
+	{ key: "Mod-]", run: indentMore },
+	{ key: "Mod-[", run: indentLess },
+];
+
 /* --- Clickable URLs (Cmd/Ctrl+click to open; plain click just edits) --- */
 
 const isMacUA = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
@@ -219,11 +245,12 @@ export function buildExtensions(onDocChanged: () => void): Extension[] {
 		syntaxHighlighting(mdHighlight),
 		EditorView.lineWrapping,
 		cmTheme,
+		indentUnit.of("\t"),
 		urlHighlighter,
 		urlClickHandler,
 		titleLineHighlighter,
 		placeholder("Start writing. The first line becomes the note's title…"),
-		keymap.of([...mdKeymap, ...defaultKeymap, ...historyKeymap]),
+		keymap.of([...indentKeymap, ...mdKeymap, ...markdownKeymap, ...defaultKeymap, ...historyKeymap]),
 		EditorView.updateListener.of((update) => {
 			if (update.docChanged) onDocChanged();
 		}),
