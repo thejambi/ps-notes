@@ -113,10 +113,13 @@ export function setHeading(view: EditorView, level: number): boolean {
 		const old = match[0];
 		const insert = level > 0 ? "#".repeat(level) + " " : "";
 		const diff = insert.length - old.length;
+		const boundary = line.from + old.length;
+		// Cursors within the old marks land right after the new ones, ready
+		// to type the heading text; cursors in the text keep their spot.
 		const map = (pos: number) =>
-			pos <= line.from ? pos : Math.max(line.from, Math.min(pos + diff, view.state.doc.length + diff));
+			pos < line.from ? pos : pos <= boundary ? line.from + insert.length : pos + diff;
 		return {
-			changes: { from: line.from, to: line.from + old.length, insert },
+			changes: { from: line.from, to: boundary, insert },
 			range: EditorSelection.range(map(range.anchor), map(range.head)),
 		};
 	});
