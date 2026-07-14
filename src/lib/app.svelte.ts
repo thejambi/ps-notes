@@ -22,6 +22,8 @@ import {
 	uniquePath,
 	trashNote,
 	archiveNote,
+	unarchiveNote,
+	ARCHIVE_DIR_NAME,
 	saveNoteFile,
 	type DirListing,
 	type NoteInfo,
@@ -272,12 +274,24 @@ export async function newNote(seedTitle = ""): Promise<void> {
 	view.focus();
 }
 
+/** Is the current folder an Archive folder? (flips Archive to Unarchive) */
+export function inArchive(): boolean {
+	return app.curDir !== null && baseName(app.curDir).toLowerCase() === ARCHIVE_DIR_NAME.toLowerCase();
+}
+
 export async function archiveCurrent(): Promise<void> {
 	if (!cur.path || !app.curDir) return;
 	await flushSave();
 	const path = cur.path;
+	const title = cur.title;
 	try {
-		await archiveNote(path, app.curDir);
+		if (inArchive()) {
+			await unarchiveNote(path, app.curDir);
+			showToast(`Unarchived ${title}`);
+		} else {
+			await archiveNote(path, app.curDir);
+			showToast(`Archived ${title}`);
+		}
 	} catch (e) {
 		console.error("archive failed", e);
 		return;
@@ -396,7 +410,13 @@ export async function archiveFromList(n: NoteInfo): Promise<void> {
 		return;
 	}
 	try {
-		await archiveNote(n.path, app.curDir);
+		if (inArchive()) {
+			await unarchiveNote(n.path, app.curDir);
+			showToast(`Unarchived ${n.title}`);
+		} else {
+			await archiveNote(n.path, app.curDir);
+			showToast(`Archived ${n.title}`);
+		}
 	} catch (e) {
 		console.error("archive failed", e);
 	}
@@ -448,7 +468,7 @@ export async function showNoteContextMenu(n: NoteInfo): Promise<void> {
 				text: isMac ? "Reveal in Finder" : "Show in File Manager",
 				action: () => void revealItemInDir(n.path),
 			},
-			{ id: "archive", text: "Archive", action: () => void archiveFromList(n) },
+			{ id: "archive", text: inArchive() ? "Unarchive" : "Archive", action: () => void archiveFromList(n) },
 			await PredefinedMenuItem.new({ item: "Separator" }),
 			{ id: "trash", text: "Move to Trash", action: () => void trashFromList(n) },
 		],

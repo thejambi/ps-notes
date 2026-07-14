@@ -14,6 +14,7 @@
 		closeMenus,
 		newNote,
 		archiveCurrent,
+		inArchive,
 		toggleWriteMode,
 		bumpFont,
 		resetFont,
@@ -87,8 +88,11 @@
 		<button class="tb-btn" title="New note ({modKeyLabel}N)" onclick={() => void newNote()} disabled={!app.curDir}
 			>New</button
 		>
-		<button class="tb-btn" title="Archive note" onclick={() => void archiveCurrent()} disabled={!app.selectedPath}
-			>Archive</button
+		<button
+			class="tb-btn"
+			title={inArchive() ? "Move note back out of the archive" : "Archive note"}
+			onclick={() => void archiveCurrent()}
+			disabled={!app.selectedPath}>{inArchive() ? "Unarchive" : "Archive"}</button
 		>
 		{#if app.curDir && app.curDir === app.bookRoot}
 			<button class="tb-btn book" title="Compile the book into an ePub" onclick={() => void compileBook()}

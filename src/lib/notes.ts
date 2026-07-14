@@ -1,6 +1,6 @@
 import { exists, mkdir, rename } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
-import { baseName, pathJoin } from "./paths";
+import { baseName, parentDir, pathJoin } from "./paths";
 
 export interface NoteInfo {
 	title: string;
@@ -113,6 +113,20 @@ export async function archiveNote(path: string, dir: string): Promise<void> {
 		const ext = extOf(name) ?? "";
 		const stem = name.slice(0, name.length - ext.length);
 		target = await uniquePath(archiveDir, stem + " (archived)", ext);
+	}
+	await rename(path, target);
+}
+
+/** Move a note out of an Archive folder, back to the archive's parent
+    (the folder it was originally archived from). */
+export async function unarchiveNote(path: string, archiveDir: string): Promise<void> {
+	const parent = parentDir(archiveDir);
+	const name = baseName(path);
+	let target = pathJoin(parent, name);
+	if (await exists(target)) {
+		const ext = extOf(name) ?? "";
+		const stem = name.slice(0, name.length - ext.length);
+		target = await uniquePath(parent, stem, ext);
 	}
 	await rename(path, target);
 }
