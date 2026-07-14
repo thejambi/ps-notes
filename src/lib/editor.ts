@@ -74,6 +74,9 @@ const cmTheme = EditorView.theme({
 		textDecoration: "underline dotted",
 		textUnderlineOffset: "2px",
 	},
+	"&.cm-mod-down .cm-clickable-url, &.cm-mod-down .cm-tag, &.cm-mod-down .cm-wikilink": {
+		cursor: "pointer",
+	},
 });
 
 /* --- Markdown editing commands (ported from NoteEditor.vala) --- */
@@ -258,6 +261,33 @@ const wikiHighlighter = ViewPlugin.fromClass(
 	{ decorations: (v) => v.decorations },
 );
 
+/* Show the pointer hand over clickables while the mod key is held */
+const modKeyCursor = ViewPlugin.fromClass(
+	class {
+		private setDown: (e: KeyboardEvent) => void;
+		private setUp: (e: KeyboardEvent) => void;
+		private clear: () => void;
+		constructor(view: EditorView) {
+			const modKey = isMacUA ? "Meta" : "Control";
+			this.setDown = (e) => {
+				if (e.key === modKey) view.dom.classList.add("cm-mod-down");
+			};
+			this.setUp = (e) => {
+				if (e.key === modKey) view.dom.classList.remove("cm-mod-down");
+			};
+			this.clear = () => view.dom.classList.remove("cm-mod-down");
+			window.addEventListener("keydown", this.setDown);
+			window.addEventListener("keyup", this.setUp);
+			window.addEventListener("blur", this.clear);
+		}
+		destroy() {
+			window.removeEventListener("keydown", this.setDown);
+			window.removeEventListener("keyup", this.setUp);
+			window.removeEventListener("blur", this.clear);
+		}
+	},
+);
+
 function matchAt(lineText: string, lineFrom: number, pos: number, regex: RegExp): string | null {
 	const re = new RegExp(regex.source, "g");
 	let m: RegExpExecArray | null;
@@ -331,6 +361,7 @@ export function buildExtensions(onDocChanged: () => void, onTagClick?: (tag: str
 		urlHighlighter,
 		tagHighlighter,
 		wikiHighlighter,
+		modKeyCursor,
 		makeClickHandler(onTagClick),
 		titleLineHighlighter,
 		placeholder("Start writing. The first line becomes the note's title…"),
