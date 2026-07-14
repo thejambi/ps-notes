@@ -500,7 +500,11 @@ export function initApp(editorParentEl: HTMLElement): () => void {
 
 	void (async () => {
 		app.settings = { ...app.settings, ...(await initSettings()) };
-		extensions = buildExtensions(onDocChanged);
+		extensions = buildExtensions(onDocChanged, (tag) => {
+			// Cmd/Ctrl+click on a #tag searches for it
+			app.filterText = tag;
+			focusFilter();
+		});
 		view = createEditor(editorParentEl, extensions);
 
 		if (app.settings.lastDir && (await exists(app.settings.lastDir))) {

@@ -68,6 +68,7 @@ const cmTheme = EditorView.theme({
 		textDecorationColor: "var(--fg-faint)",
 	},
 	".cm-title-line": { fontWeight: "700" },
+	".cm-tag": { color: "var(--accent)", fontWeight: "500" },
 });
 
 /* --- Markdown editing commands (ported from NoteEditor.vala) --- */
@@ -200,27 +201,69 @@ const urlHighlighter = ViewPlugin.fromClass(
 	{ decorations: (v) => v.decorations },
 );
 
-const urlClickHandler = EditorView.domEventHandlers({
-	mousedown(e, view) {
-		const mod = isMacUA ? e.metaKey : e.ctrlKey;
-		if (!mod || e.button !== 0) return false;
-		const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
-		if (pos == null) return false;
-		const line = view.state.doc.lineAt(pos);
-		const re = new RegExp(URL_REGEX.source, "g");
-		let m: RegExpExecArray | null;
-		while ((m = re.exec(line.text))) {
-			const from = line.from + m.index;
-			const to = from + m[0].length;
-			if (pos >= from && pos <= to) {
+/* --- Tags: #likeThis, Cmd/Ctrl+click to search for the tag --- */
+
+// A letter must follow the # (so "# Heading" and "## marks" never match),
+// and the # must start the line or follow whitespace (so URL #fragments don't).
+const TAG_REGEX = /(?<=^|\s)#[A-Za-z][A-Za-z0-9_-]*/g;
+
+const tagMatcher = new MatchDecorator({
+	regexp: TAG_REGEX,
+	decoration: Decoration.mark({
+		class: "cm-tag",
+		attributes: { title: (isMacUA ? "⌘" : "Ctrl+") + "click to search this tag" },
+	}),
+});
+
+const tagHighlighter = ViewPlugin.fromClass(
+	class {
+		decorations: DecorationSet;
+		constructor(view: EditorView) {
+			this.decorations = tagMatcher.createDeco(view);
+		}
+		update(update: ViewUpdate) {
+			this.decorations = tagMatcher.updateDeco(update, this.decorations);
+		}
+	},
+	{ decorations: (v) => v.decorations },
+);
+
+function matchAt(lineText: string, lineFrom: number, pos: number, regex: RegExp): string | null {
+	const re = new RegExp(regex.source, "g");
+	let m: RegExpExecArray | null;
+	while ((m = re.exec(lineText))) {
+		const from = lineFrom + m.index;
+		if (pos >= from && pos <= from + m[0].length) return m[0];
+	}
+	return null;
+}
+
+function makeClickHandler(onTagClick?: (tag: string) => void) {
+	return EditorView.domEventHandlers({
+		mousedown(e, view) {
+			const mod = isMacUA ? e.metaKey : e.ctrlKey;
+			if (!mod || e.button !== 0) return false;
+			const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+			if (pos == null) return false;
+			const line = view.state.doc.lineAt(pos);
+			const url = matchAt(line.text, line.from, pos, URL_REGEX);
+			if (url) {
 				e.preventDefault();
-				void openUrl(m[0]);
+				void openUrl(url);
 				return true;
 			}
-		}
-		return false;
-	},
-});
+			if (onTagClick) {
+				const tag = matchAt(line.text, line.from, pos, TAG_REGEX);
+				if (tag) {
+					e.preventDefault();
+					onTagClick(tag);
+					return true;
+				}
+			}
+			return false;
+		},
+	});
+}
 
 /* --- Bold first line (the note's title) --- */
 
@@ -241,7 +284,7 @@ const titleLineHighlighter = ViewPlugin.fromClass(
 	{ decorations: (v) => v.decorations },
 );
 
-export function buildExtensions(onDocChanged: () => void): Extension[] {
+export function buildExtensions(onDocChanged: () => void, onTagClick?: (tag: string) => void): Extension[] {
 	return [
 		history(),
 		markdown({ base: markdownLanguage }),
@@ -250,7 +293,8 @@ export function buildExtensions(onDocChanged: () => void): Extension[] {
 		cmTheme,
 		indentUnit.of("\t"),
 		urlHighlighter,
-		urlClickHandler,
+		tagHighlighter,
+		makeClickHandler(onTagClick),
 		titleLineHighlighter,
 		placeholder("Start writing. The first line becomes the note's title…"),
 		keymap.of([...indentKeymap, ...mdKeymap, ...markdownKeymap, ...defaultKeymap, ...historyKeymap]),
