@@ -76,6 +76,19 @@ export function mdToHtml(md: string): string {
 			i++;
 			continue;
 		}
+		if (t.startsWith("```")) {
+			// Fenced code block: verbatim, whitespace preserved exactly
+			flushPara();
+			i++;
+			const code: string[] = [];
+			while (i < lines.length && !lines[i].trim().startsWith("```")) {
+				code.push(lines[i]);
+				i++;
+			}
+			i++; // skip the closing fence
+			html += `<pre><code>${escapeHtml(code.join("\n"))}</code></pre>\n`;
+			continue;
+		}
 		const h = /^(#{1,6})\s+(.*)$/.exec(t);
 		if (h) {
 			flushPara();

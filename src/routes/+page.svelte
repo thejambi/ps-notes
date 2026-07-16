@@ -324,6 +324,22 @@
 		padding: 0 4px;
 		border-radius: 3px;
 	}
+	.preview :global(pre) {
+		background: var(--bg-panel);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		padding: 12px 14px;
+		margin: 0 0 0.8em;
+		overflow-x: auto;
+		line-height: 1.45;
+	}
+	.preview :global(pre code) {
+		background: none;
+		border: none;
+		padding: 0;
+		font-size: 0.85em;
+		white-space: pre;
+	}
 	.preview :global(hr) {
 		border: none;
 		border-top: 1px solid var(--border);
