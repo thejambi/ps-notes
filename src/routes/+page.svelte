@@ -340,6 +340,28 @@
 		font-size: 0.85em;
 		white-space: pre;
 	}
+	.preview :global(table) {
+		border-collapse: collapse;
+		margin: 0 0 0.8em;
+	}
+	.preview :global(th),
+	.preview :global(td) {
+		border: 1px solid var(--border);
+		padding: 4px 10px;
+	}
+	.preview :global(th) {
+		background: var(--bg-panel);
+	}
+	.preview :global(input[type="checkbox"]) {
+		margin-right: 6px;
+		accent-color: var(--accent);
+	}
+	.preview :global(del) {
+		color: var(--fg-dim);
+	}
+	.preview :global(img) {
+		max-width: 100%;
+	}
 	.preview :global(hr) {
 		border: none;
 		border-top: 1px solid var(--border);
