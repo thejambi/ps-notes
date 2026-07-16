@@ -30,6 +30,7 @@ import {
 } from "./notes";
 import { buildExtensions, createEditor, setDocument, countWords } from "./editor";
 import { detectBookRoot, compileChapterText, saveCompiledChapter, compileEpub } from "./book";
+import { mdToHtml } from "./render";
 
 export const isMac = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
 export const isWindows = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
@@ -68,6 +69,9 @@ export const app = $state({
 	// Book mode: set when a visited folder contains a title.txt starting with ---
 	bookRoot: null as string | null,
 	toast: "",
+	// Rendered-markdown reading view
+	viewMode: false,
+	viewHtml: "",
 });
 
 // --- Non-reactive editor / save machinery ---
@@ -252,6 +256,7 @@ export async function openNote(n: NoteInfo): Promise<void> {
 	app.selectedPath = n.path;
 	setDocument(view, extensions, text);
 	app.wordCount = countWords(text);
+	refreshViewHtml();
 	dirty = false;
 	isOpening = false;
 	view.focus();
@@ -264,6 +269,7 @@ export async function newNote(seedTitle = ""): Promise<void> {
 	app.selectedPath = null;
 	setDocument(view, extensions, seedTitle ? seedTitle + "\n\n" : "");
 	app.wordCount = countWords(seedTitle);
+	refreshViewHtml();
 	dirty = false;
 	isOpening = false;
 	if (seedTitle) {
@@ -388,6 +394,7 @@ async function onExternalChange(): Promise<void> {
 			setDocument(view, extensions, text);
 			view.dispatch({ selection: { anchor: sel } });
 			app.wordCount = countWords(text);
+			refreshViewHtml();
 			isOpening = false;
 		}
 	} catch {
@@ -505,6 +512,30 @@ export function toggleWriteMode(): void {
 	setWriteMode(!app.writeMode);
 }
 
+function refreshViewHtml(): void {
+	if (app.viewMode) app.viewHtml = mdToHtml(view.state.doc.toString());
+}
+
+export function setViewMode(on: boolean): void {
+	app.viewMode = on;
+	if (on) {
+		void flushSave();
+		refreshViewHtml();
+	} else {
+		focusEditor();
+	}
+}
+
+export function toggleViewMode(): void {
+	setViewMode(!app.viewMode);
+}
+
+/** Put text in the search box and focus it (tag / wiki-link clicks). */
+export function searchFor(text: string): void {
+	app.filterText = text;
+	focusFilter();
+}
+
 export function closeMenus(): void {
 	app.openMenuShown = false;
 	app.settingsMenuShown = false;
@@ -520,11 +551,7 @@ export function initApp(editorParentEl: HTMLElement): () => void {
 
 	void (async () => {
 		app.settings = { ...app.settings, ...(await initSettings()) };
-		extensions = buildExtensions(onDocChanged, (tag) => {
-			// Cmd/Ctrl+click on a #tag searches for it
-			app.filterText = tag;
-			focusFilter();
-		});
+		extensions = buildExtensions(onDocChanged, searchFor);
 		view = createEditor(editorParentEl, extensions);
 
 		if (app.settings.lastDir && (await exists(app.settings.lastDir))) {

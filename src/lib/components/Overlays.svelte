@@ -7,6 +7,7 @@
 		["Esc", "Clear filter / exit write mode"],
 		["Enter (in filter)", "Open top match, or create note with that title"],
 		[isMac ? "⌘⇧W" : "Ctrl+W", "Toggle write mode"],
+		[isMac ? "⌘⇧V" : "Ctrl+Shift+V", "Toggle view mode (rendered markdown)"],
 		[`${mod}O`, "Choose notes folder"],
 		[`${mod}=  /  ${mod}-  /  ${mod}0`, "Font size bigger / smaller / reset"],
 		[`${mod}A then Delete`, "Delete current note (emptied notes go to trash)"],

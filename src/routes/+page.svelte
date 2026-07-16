@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
+	import { openUrl } from "@tauri-apps/plugin-opener";
 	import Toolbar from "$lib/components/Toolbar.svelte";
 	import Sidebar from "$lib/components/Sidebar.svelte";
 	import Overlays from "$lib/components/Overlays.svelte";
@@ -21,6 +22,9 @@
 		closeMenus,
 		setWriteMode,
 		toggleWriteMode,
+		setViewMode,
+		toggleViewMode,
+		searchFor,
 		bumpFont,
 		resetFont,
 		showEditContextMenu,
@@ -106,6 +110,8 @@
 				app.modal = null;
 			} else if (app.openMenuShown || app.settingsMenuShown) {
 				closeMenus();
+			} else if (app.viewMode) {
+				setViewMode(false);
 			} else if (app.writeMode) {
 				setWriteMode(false);
 			} else if (isFilterFocused()) {
@@ -124,6 +130,9 @@
 			if (key === "w") {
 				e.preventDefault();
 				toggleWriteMode();
+			} else if (key === "v") {
+				e.preventDefault();
+				toggleViewMode();
 			}
 			return;
 		}
@@ -198,7 +207,32 @@
 			<div class="divider" role="separator" aria-orientation="vertical" onmousedown={startPaneDrag}></div>
 		{/if}
 
-		<div class="editor-wrap" style={editorStyle} bind:this={editorParent}></div>
+		<div class="editor-wrap" style={editorStyle}>
+			<div class="cm-host" class:hidden={app.viewMode} bind:this={editorParent}></div>
+			{#if app.viewMode}
+				<!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+				<div
+					class="preview"
+					onclick={(e) => {
+						const el = e.target as Element | null;
+						const a = el?.closest("a");
+						if (a) {
+							e.preventDefault();
+							void openUrl(a.getAttribute("href") ?? "");
+							return;
+						}
+						const chip = el?.closest("[data-search]") as HTMLElement | null;
+						if (chip?.dataset.search) {
+							setViewMode(false);
+							searchFor(chip.dataset.search);
+						}
+					}}
+				>
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					{@html app.viewHtml}
+				</div>
+			{/if}
+		</div>
 	</div>
 
 	<Overlays />
@@ -231,7 +265,81 @@
 		height: 100%;
 		overflow: hidden;
 	}
+	.cm-host {
+		height: 100%;
+	}
+	.cm-host.hidden {
+		display: none;
+	}
 	.editor-wrap :global(.cm-editor) {
 		height: 100%;
+	}
+
+	/* --- Rendered markdown view --- */
+	.preview {
+		height: 100%;
+		overflow-y: auto;
+		padding: 18px 24px 45vh;
+		line-height: 1.6;
+		max-width: var(--editor-max-width, none);
+		margin: 0 auto;
+		box-sizing: border-box;
+	}
+	.preview :global(h1) {
+		font-size: 1.55em;
+		margin: 0.6em 0 0.4em;
+	}
+	.preview :global(h2) {
+		font-size: 1.35em;
+		margin: 0.8em 0 0.4em;
+	}
+	.preview :global(h3) {
+		font-size: 1.2em;
+		margin: 0.8em 0 0.4em;
+	}
+	.preview :global(h4),
+	.preview :global(h5),
+	.preview :global(h6) {
+		font-size: 1.05em;
+		margin: 0.8em 0 0.4em;
+	}
+	.preview :global(p) {
+		margin: 0 0 0.8em;
+	}
+	.preview :global(ul),
+	.preview :global(ol) {
+		margin: 0 0 0.8em;
+		padding-left: 1.7em;
+	}
+	.preview :global(blockquote) {
+		margin: 0 0 0.8em;
+		padding: 0.1em 0 0.1em 1em;
+		border-left: 3px solid var(--border);
+		color: var(--fg-dim);
+	}
+	.preview :global(code) {
+		font-family: var(--font-mono);
+		font-size: 0.88em;
+		background: var(--bg-panel);
+		padding: 0 4px;
+		border-radius: 3px;
+	}
+	.preview :global(hr) {
+		border: none;
+		border-top: 1px solid var(--border);
+		margin: 1.2em 0;
+	}
+	.preview :global(a) {
+		color: var(--accent);
+		cursor: pointer;
+	}
+	.preview :global(.pv-tag),
+	.preview :global(.pv-wiki) {
+		color: var(--accent);
+		cursor: pointer;
+	}
+	.preview :global(.pv-wiki) {
+		text-decoration: underline dotted;
+		text-underline-offset: 2px;
 	}
 </style>

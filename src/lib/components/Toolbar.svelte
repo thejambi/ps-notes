@@ -16,6 +16,7 @@
 		archiveCurrent,
 		inArchive,
 		toggleWriteMode,
+		toggleViewMode,
 		bumpFont,
 		resetFont,
 		compileBook,
@@ -145,6 +146,9 @@
 						}}>{app.settings.showWordCount ? "✓" : " "} Show word count</button
 					>
 					<button class="menu-item check" onclick={toggleWriteMode}>{app.writeMode ? "✓" : " "} Write mode</button>
+					<button class="menu-item check" onclick={toggleViewMode}
+						>{app.viewMode ? "✓" : " "} View mode (rendered)</button
+					>
 					<div class="menu-sep"></div>
 					<div class="menu-label">Appearance</div>
 					{#each ["system", "light", "dark"] as const as t (t)}
