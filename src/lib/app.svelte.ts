@@ -501,7 +501,12 @@ export function setWriteMode(on: boolean): void {
 	if (on && !app.writeMode) {
 		// Measure the scroller's inner width (excludes any classic scrollbar)
 		// so the pinned column matches the pre-toggle text width exactly.
-		app.writeModeWidth = view?.scrollDOM.clientWidth ?? editorParent?.clientWidth ?? null;
+		// A hidden editor (view mode) measures 0 — fall back to the visible
+		// wrapper, never pin to zero.
+		let w = view?.scrollDOM.clientWidth || 0;
+		if (w <= 0) w = editorParent?.clientWidth || 0;
+		if (w <= 0) w = editorParent?.parentElement?.clientWidth || 0;
+		app.writeModeWidth = w > 0 ? w : null;
 	}
 	app.writeMode = on;
 	if (!on) app.writeModeWidth = null;
