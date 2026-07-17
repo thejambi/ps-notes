@@ -144,19 +144,33 @@ export function adjustHeading(view: EditorView, delta: number): boolean {
 	return setHeading(view, level);
 }
 
-/** Insert today's date as "YYYY-MM-DD " at the cursor (replaces selection),
-    leaving the cursor after the trailing space. */
-export function insertDate(view: EditorView): boolean {
-	const d = new Date();
-	const pad = (n: number) => String(n).padStart(2, "0");
-	const text = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} `;
-	view.dispatch(view.state.replaceSelection(text), { scrollIntoView: true, userEvent: "input" });
-	view.focus();
-	return true;
+/* --- Date / time inserts (OneNote-style chords) --- */
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const fmtDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const fmtTime = (d: Date) => `${d.getHours() % 12 || 12}:${pad2(d.getMinutes())}${d.getHours() < 12 ? "am" : "pm"}`;
+
+/** Insert `fmt(now)` plus a trailing space at the cursor (replaces any
+    selection), leaving the cursor after the space. */
+function makeInserter(fmt: (d: Date) => string) {
+	return (view: EditorView): boolean => {
+		view.dispatch(view.state.replaceSelection(fmt(new Date()) + " "), {
+			scrollIntoView: true,
+			userEvent: "input",
+		});
+		view.focus();
+		return true;
+	};
 }
 
+export const insertDate = makeInserter(fmtDate);
+export const insertTime = makeInserter(fmtTime);
+export const insertDateTime = makeInserter((d) => `${fmtDate(d)} ${fmtTime(d)}`);
+
 const mdKeymap = [
-	{ key: "Mod-d", run: insertDate },
+	{ mac: "Cmd-Shift-d", win: "Alt-Shift-d", linux: "Alt-Shift-d", run: insertDate },
+	{ mac: "Cmd-Shift-t", win: "Alt-Shift-t", linux: "Alt-Shift-t", run: insertTime },
+	{ mac: "Cmd-Shift-f", win: "Alt-Shift-f", linux: "Alt-Shift-f", run: insertDateTime },
 	{ key: "Mod-b", run: (v: EditorView) => toggleSurround(v, "**") },
 	{ key: "Mod-i", run: (v: EditorView) => toggleSurround(v, "*") },
 	{ key: "Mod-k", run: (v: EditorView) => toggleSurroundWith(v, "<!-- ", " -->") },
