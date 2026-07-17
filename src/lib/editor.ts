@@ -144,7 +144,19 @@ export function adjustHeading(view: EditorView, delta: number): boolean {
 	return setHeading(view, level);
 }
 
+/** Insert today's date as "YYYY-MM-DD " at the cursor (replaces selection),
+    leaving the cursor after the trailing space. */
+export function insertDate(view: EditorView): boolean {
+	const d = new Date();
+	const pad = (n: number) => String(n).padStart(2, "0");
+	const text = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} `;
+	view.dispatch(view.state.replaceSelection(text), { scrollIntoView: true, userEvent: "input" });
+	view.focus();
+	return true;
+}
+
 const mdKeymap = [
+	{ key: "Mod-d", run: insertDate },
 	{ key: "Mod-b", run: (v: EditorView) => toggleSurround(v, "**") },
 	{ key: "Mod-i", run: (v: EditorView) => toggleSurround(v, "*") },
 	{ key: "Mod-k", run: (v: EditorView) => toggleSurroundWith(v, "<!-- ", " -->") },

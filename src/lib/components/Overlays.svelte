@@ -11,6 +11,7 @@
 		[`${mod}O`, "Choose notes folder"],
 		[`${mod}=  /  ${mod}-  /  ${mod}0`, "Font size bigger / smaller / reset"],
 		[`${mod}A then Delete`, "Delete current note (emptied notes go to trash)"],
+		[`${mod}D`, "Insert today's date (YYYY-MM-DD)"],
 		[`${mod}B  /  ${mod}I`, "Bold / italics"],
 		["Tab / Shift+Tab", "Indent / unindent (list items indent whole bullet)"],
 		[`${mod}]  /  ${mod}[`, "Indent / unindent line"],
