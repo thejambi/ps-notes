@@ -12,13 +12,18 @@
 		[`${mod}=  /  ${mod}-  /  ${mod}0`, "Font size bigger / smaller / reset"],
 		[`${mod}A then Delete`, "Delete current note (emptied notes go to trash)"],
 		[isMac ? "⌘⇧D / ⌘⇧T / ⌘⇧F" : "Alt+Shift+D / T / F", "Insert date / time / both at cursor"],
-		[`${mod}B  /  ${mod}I`, "Bold / italics"],
+		[`${mod}B  /  ${mod}I  /  ${isMac ? "⌥⌘U" : "Ctrl+Alt+U"}`, "Bold / italics / strikethrough"],
+		[`${mod}K  /  ${isMac ? "⌘⇧K" : "Ctrl+Shift+K"}`, "Add link / wiki link"],
+		[`${mod}J  /  ${isMac ? "⌘⇧J" : "Ctrl+Shift+J"}`, "Inline code / code block"],
+		[`${mod}L  /  ${isMac ? "⌘⇧L" : "Ctrl+Shift+L"}`, "Bullet list / ordered list"],
+		[`${isMac ? "⌥⌘L" : "Ctrl+Alt+L"}  /  ${isMac ? "⌥⌘X" : "Ctrl+Alt+X"}`, "Task list / toggle task done"],
+		[`${isMac ? "⌘>" : "Ctrl+>"}`, "Blockquote"],
 		["Tab / Shift+Tab", "Indent / unindent (list items indent whole bullet)"],
 		[`${mod}]  /  ${mod}[`, "Indent / unindent line"],
 		["Enter (in a list)", "Continue the list; Enter on an empty item ends it"],
 		[`${mod}1–6`, "Set heading level"],
 		[`${mod}\\  /  ${isMac ? "⌘⇧\\" : "Ctrl+Shift+\\"}`, "Increase / decrease heading level"],
-		[`${mod}K`, "Toggle HTML comment around selection"],
+		[`${mod}/`, "Toggle HTML comment around selection"],
 	];
 </script>
 
