@@ -49,36 +49,58 @@
 		}
 	});
 
-	// Filter notes: title matches show instantly; full-text matches (searched
-	// in Rust) are appended after a short debounce.
+	// Filter notes: title matches show instantly while typing; full-text
+	// matches (searched in Rust) are appended after a short debounce.
+	// When the listing refreshes under an unchanged query (e.g. autosave
+	// triggering the folder watcher), the current results stay on screen
+	// untouched until the fresh full results are ready — no flicker.
 	const SEARCH_DEBOUNCE_MS = 250;
 	let searchGen = 0;
+	let lastQuery: string | null = null;
+
+	function setDisplay(list: typeof app.displayNotes): void {
+		// Skip the update entirely when nothing visible changed
+		const cur = app.displayNotes;
+		if (list.length === cur.length && list.every((n, i) => n.path === cur[i].path && n.title === cur[i].title)) {
+			return;
+		}
+		app.displayNotes = list;
+	}
+
 	$effect(() => {
 		const q = app.filterText.trim().toLowerCase();
 		const notes = sortNotes(app.listing.notes, app.settings.sortByModified);
 		const gen = ++searchGen;
-		app.renderLimit = RENDER_CHUNK;
+		const queryChanged = q !== lastQuery;
+		lastQuery = q;
+		if (queryChanged) app.renderLimit = RENDER_CHUNK;
 		if (!q) {
-			app.displayNotes = notes;
+			setDisplay(notes);
 			return;
 		}
 		const titleMatches = notes.filter((n) => n.title.toLowerCase().includes(q));
-		app.displayNotes = titleMatches;
+		if (queryChanged) {
+			app.displayNotes = titleMatches; // instant feedback while typing the filter
+		}
 		const dir = app.curDir;
-		if (!dir || q.length < 2) return;
-		const timer = setTimeout(async () => {
-			try {
-				const hits = await searchNoteContents(dir, q);
-				if (gen !== searchGen) return;
-				const titleSet = new Set(titleMatches.map((n) => n.path));
-				const bodyMatches = notes.filter((n) => hits.has(n.path) && !titleSet.has(n.path));
-				if (bodyMatches.length > 0) {
-					app.displayNotes = [...titleMatches, ...bodyMatches];
+		if (!dir || q.length < 2) {
+			if (!queryChanged) setDisplay(titleMatches);
+			return;
+		}
+		const timer = setTimeout(
+			async () => {
+				try {
+					const hits = await searchNoteContents(dir, q);
+					if (gen !== searchGen) return;
+					const titleSet = new Set(titleMatches.map((n) => n.path));
+					const bodyMatches = notes.filter((n) => hits.has(n.path) && !titleSet.has(n.path));
+					setDisplay([...titleMatches, ...bodyMatches]);
+				} catch (e) {
+					console.error("content search failed", e);
 				}
-			} catch (e) {
-				console.error("content search failed", e);
-			}
-		}, SEARCH_DEBOUNCE_MS);
+			},
+			queryChanged ? SEARCH_DEBOUNCE_MS : 50,
+		);
 		return () => clearTimeout(timer);
 	});
 
